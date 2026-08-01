@@ -19,6 +19,7 @@ from datetime import UTC, datetime, timedelta
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 from zephyrus.forecast.demand import demand_forecast_slots
 from zephyrus.io.carbon import CarbonIntensityClient
@@ -37,7 +38,7 @@ from zephyrus.schemas import (
 )
 from zephyrus.utils import align_price_carbon
 
-TTL = 1800  # 30 min — keeps the demo live without re-hitting the APIs every rerun
+TTL = 900  # 15 min — aligned with the auto-refresh so a tick re-pulls fresh data
 EvKey = tuple[int, int, int, float] | None
 
 
@@ -140,9 +141,12 @@ def run_sweep(
 # --- page ------------------------------------------------------------------------------
 st.set_page_config(page_title="Zephyrus", layout="wide")
 st.title("⚡ Zephyrus — flexibility optimiser")
-st.caption("Live Octopus Agile prices + National Grid carbon intensity -> optimal battery plan")
 
 with st.sidebar:
+    st.header("Live data")
+    auto_refresh = st.checkbox("🔄 Auto-refresh", value=True)
+    refresh_min = st.select_slider("Every (minutes)", options=[5, 10, 15, 30], value=15)
+
     st.header("Asset & region")
     region = str(st.selectbox("GSP region", list("ABCDEFGHJKLMNP"), index=2))
     capacity = st.slider("Battery capacity (kWh)", 2.0, 20.0, 5.0, 0.5)
@@ -166,8 +170,20 @@ with st.sidebar:
     fleet_size = st.slider("Fleet size (assets)", 1, 50, 10, 1)
     headroom = st.slider("Network headroom (kW, 0 = none)", 0.0, 200.0, 0.0, 5.0)
 
-start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+# Auto-refresh: reruns the whole script every N minutes so the page ticks on its own,
+# and the TTL cache re-pulls fresh prices/carbon on each tick.
+if auto_refresh:
+    st_autorefresh(interval=refresh_min * 60 * 1000, key="live_refresh")
+
+now = datetime.now(UTC)
+# Window starts at the current half-hourly settlement boundary (advances every 30 min).
+start = now.replace(minute=30 if now.minute >= 30 else 0, second=0, microsecond=0)
 start_iso = start.isoformat()
+refresh_note = f" · auto-refresh every {refresh_min} min" if auto_refresh else ""
+st.caption(
+    f"Live Octopus Agile + National Grid carbon → optimal battery plan  ·  "
+    f"updated {now:%H:%M:%S} UTC{refresh_note}"
+)
 prices, carbon = load_market(region, hours, start_iso)
 
 if not prices:
