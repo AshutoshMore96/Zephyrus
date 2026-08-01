@@ -6,14 +6,15 @@ energy assets into a virtual power plant.**
 > *Named for Zephyrus, the Greek god of the west wind — a nod to renewable generation and the flexibility that balances it.*
 
 [![CI](https://github.com/AshutoshMore96/Zephyrus/actions/workflows/ci.yml/badge.svg)](https://github.com/AshutoshMore96/Zephyrus/actions)
-[![Live demo](https://img.shields.io/badge/live%20demo-Streamlit-ff4b4b?logo=streamlit&logoColor=white)](https://YOUR-APP.streamlit.app)
+[![Live demo](https://img.shields.io/badge/live%20demo-Streamlit-ff4b4b?logo=streamlit&logoColor=white)](https://ashutoshmore96-zephyrus-srczephyrusdashboardapp-ahrsgk.streamlit.app/)
 ![python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![code style](https://img.shields.io/badge/style-ruff%20%2B%20black-000000)
 ![coverage](https://img.shields.io/badge/coverage-76%25-green)
 
-> **🔗 Live demo:** **https://YOUR-APP.streamlit.app** — interactive dashboard optimising a
-> battery on live UK prices + carbon (replace with your Streamlit Cloud URL after deploy).
+> **🔗 Live demo:** **https://ashutoshmore96-zephyrus-srczephyrusdashboardapp-ahrsgk.streamlit.app/**
+> — interactive dashboard optimising a battery on live UK prices + carbon, auto-refreshing
+> as new half-hourly data arrives.
 
 Zephyrus schedules a home battery/EV against **live UK half-hourly electricity prices**
 (Octopus Agile) and the **National Grid carbon-intensity forecast** to minimise cost and

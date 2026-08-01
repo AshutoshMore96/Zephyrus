@@ -1,5 +1,11 @@
 # Dependency spec for Streamlit Community Cloud / Hugging Face Spaces.
-# Installs the Zephyrus package from ./pyproject.toml WITH its `dashboard` extra
-# (streamlit + plotly) and every core runtime dep (pulp/CBC solver, pandas, numpy,
-# pyarrow, httpx, pydantic, typer …). CBC ships inside the pulp wheel — no apt packages.
+#
+# `.[dashboard]` installs the Zephyrus package from ./pyproject.toml (core runtime deps:
+# pulp/CBC, pandas, numpy, pyarrow, httpx, pydantic, typer …) plus its dashboard extra.
+# The dashboard libraries are ALSO pinned explicitly below, because Streamlit Cloud caches
+# its environment on this file's contents — pinning them here guarantees a reinstall and
+# never depends on extras resolution. (streamlit is pre-installed on Cloud.)
 .[dashboard]
+streamlit>=1.33
+plotly>=5.20
+streamlit-autorefresh>=1.0
