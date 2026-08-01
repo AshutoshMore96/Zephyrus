@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
+import streamlit.components.v1 as components
 
 from zephyrus.forecast.demand import demand_forecast_slots
 from zephyrus.io.carbon import CarbonIntensityClient
@@ -170,10 +170,14 @@ with st.sidebar:
     fleet_size = st.slider("Fleet size (assets)", 1, 50, 10, 1)
     headroom = st.slider("Network headroom (kW, 0 = none)", 0.0, 200.0, 0.0, 5.0)
 
-# Auto-refresh: reruns the whole script every N minutes so the page ticks on its own,
-# and the TTL cache re-pulls fresh prices/carbon on each tick.
+# Auto-refresh, dependency-free: a tiny JS timer reloads the app every N minutes so the
+# page ticks on its own, and the TTL cache re-pulls fresh prices/carbon on each reload.
 if auto_refresh:
-    st_autorefresh(interval=refresh_min * 60 * 1000, key="live_refresh")
+    components.html(
+        f"<script>setTimeout(function(){{window.parent.location.reload();}}, "
+        f"{refresh_min * 60 * 1000});</script>",
+        height=0,
+    )
 
 now = datetime.now(UTC)
 # Window starts at the current half-hourly settlement boundary (advances every 30 min).

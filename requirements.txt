@@ -2,10 +2,9 @@
 #
 # `.[dashboard]` installs the Zephyrus package from ./pyproject.toml (core runtime deps:
 # pulp/CBC, pandas, numpy, pyarrow, httpx, pydantic, typer …) plus its dashboard extra.
-# The dashboard libraries are ALSO pinned explicitly below, because Streamlit Cloud caches
-# its environment on this file's contents — pinning them here guarantees a reinstall and
-# never depends on extras resolution. (streamlit is pre-installed on Cloud.)
+# The dashboard libraries are also pinned explicitly so Cloud always reinstalls them
+# (its env cache is keyed on this file). Auto-refresh uses Streamlit's built-in
+# components.html — no third-party refresh package required.
 .[dashboard]
 streamlit>=1.33
 plotly>=5.20
-streamlit-autorefresh>=1.0

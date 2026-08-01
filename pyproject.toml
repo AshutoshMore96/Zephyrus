@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 api = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
-dashboard = ["streamlit>=1.33", "plotly>=5.20", "streamlit-autorefresh>=1.0"]
+dashboard = ["streamlit>=1.33", "plotly>=5.20"]
 # Heavier modelling deps for the forecasting milestones (M3/M4).
 ml = ["scikit-learn>=1.4", "lightgbm>=4.3", "mlflow>=2.12", "darts>=0.29"]
 dev = [
