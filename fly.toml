@@ -1,0 +1,29 @@
+# Fly.io deploy config for the Zephyrus API (M7 — free-tier friendly).
+#   fly launch --no-deploy   # once, to create the app
+#   fly deploy               # build from Dockerfile and ship
+app = "zephyrus"
+primary_region = "lhr"  # London
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ZEPHYRUS_LOG_LEVEL = "INFO"
+  ZEPHYRUS_RATE_LIMIT_PER_MIN = "120"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true    # scale to zero on the free tier
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

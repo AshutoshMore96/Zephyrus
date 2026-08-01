@@ -1,0 +1,23 @@
+# Human-editable defaults for experiments. Environment variables (ZEPHYRUS_*) still
+# take precedence at runtime; this file documents intent and is loaded by notebooks /
+# experiment scripts. See src/zephyrus/config.py for the authoritative schema.
+
+octopus:
+  gsp_group: C          # GSP region letter A-P (C = London)
+  product: null         # null -> auto-discover the latest Agile import product
+
+carbon:
+  region_id: 13         # null -> national; 13 = London
+
+optimiser:
+  carbon_weight_gbp_per_kg: 0.0   # 0 = pure cost; e.g. 0.05 to price in carbon
+  horizon_hours: 24
+
+battery:
+  capacity_kwh: 5.0
+  max_charge_kw: 3.0
+  max_discharge_kw: 3.0
+  round_trip_efficiency: 0.90
+  soc_min_frac: 0.10
+  initial_soc_frac: 0.50
+  allow_export: false

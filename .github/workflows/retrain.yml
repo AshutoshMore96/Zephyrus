@@ -1,0 +1,33 @@
+name: retrain
+
+# Weekly scheduled retrain of the demand forecaster (M7). Backtests, registers the model
+# version, logs to MLflow and fails the run on a performance regression.
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # 06:00 UTC every Monday
+  workflow_dispatch: {}   # allow manual runs
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (with ML extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[ml,dev]"
+      - name: Retrain + register + regression check
+        run: python scripts/retrain.py --weeks 8 --folds 4
+      - name: Upload MLflow runs + registry
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-artifacts
+          path: |
+            mlruns/
+            data/registry/
+          if-no-files-found: ignore

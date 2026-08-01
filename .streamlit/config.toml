@@ -1,0 +1,15 @@
+# Streamlit theme + server config (used on Streamlit Community Cloud and locally).
+[server]
+headless = true
+enableCORS = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#2fbfb6"
+backgroundColor = "#0e1518"
+secondaryBackgroundColor = "#151e22"
+textColor = "#e8f0f0"
+font = "sans serif"

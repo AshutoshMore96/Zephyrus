@@ -1,0 +1,5 @@
+# Dependency spec for Streamlit Community Cloud / Hugging Face Spaces.
+# Installs the Zephyrus package from ./pyproject.toml WITH its `dashboard` extra
+# (streamlit + plotly) and every core runtime dep (pulp/CBC solver, pandas, numpy,
+# pyarrow, httpx, pydantic, typer …). CBC ships inside the pulp wheel — no apt packages.
+.[dashboard]

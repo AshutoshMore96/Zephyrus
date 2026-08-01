@@ -1,0 +1,33 @@
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+venv/
+.env
+
+# Builds
+build/
+dist/
+*.egg-info/
+
+# Coverage / experiment tracking
+.coverage
+htmlcov/
+mlruns/
+
+# Local data (keep the folder structure, ignore contents)
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+# Runtime output written by the app (snapshots, schedules, model registry)
+data/snapshots/
+data/schedules/
+data/registry/
