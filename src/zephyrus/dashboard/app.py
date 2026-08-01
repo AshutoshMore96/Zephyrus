@@ -5,6 +5,11 @@ Run::
     streamlit run src/zephyrus/dashboard/app.py
 
 This is the recruiter-facing demo — the headline metrics show £ and kg CO2 saved.
+
+Every expensive step (the live API fetch, the demand forecast, and each MILP solve) is
+wrapped in ``st.cache_data`` keyed on primitive inputs only, so pydantic models are built
+*inside* the cached functions (never passed as unhashable args). Repeated slider moves are
+then instant and the free APIs aren't hammered; a 30-minute TTL keeps data reasonably live.
 """
 
 from __future__ import annotations
@@ -21,16 +26,125 @@ from zephyrus.io.octopus import OctopusClient
 from zephyrus.optimise.milp import optimise_schedule
 from zephyrus.optimise.sensitivity import sweep_savings
 from zephyrus.optimise.vpp import optimise_portfolio
-from zephyrus.schemas import BatterySpec, EVConstraints
+from zephyrus.schemas import (
+    BatterySpec,
+    CarbonSlot,
+    EVConstraints,
+    HalfHourlyPrice,
+    LoadForecastSlot,
+    OptimisationResult,
+    PortfolioResult,
+)
 from zephyrus.utils import align_price_carbon
 
+TTL = 1800  # 30 min — keeps the demo live without re-hitting the APIs every rerun
+EvKey = tuple[int, int, int, float] | None
+
+
+# --- cached compute (primitives in, picklable models out) ------------------------------
+@st.cache_data(ttl=TTL, show_spinner="Fetching live Agile prices + carbon intensity…")
+def load_market(
+    region: str, hours: int, start_iso: str
+) -> tuple[list[HalfHourlyPrice], list[CarbonSlot]]:
+    start = datetime.fromisoformat(start_iso)
+    prices = OctopusClient().get_agile_prices(
+        start, start + timedelta(hours=hours), gsp_group=region
+    )
+    carbon = CarbonIntensityClient().get_forecast_48h(start)
+    return align_price_carbon(prices, carbon)
+
+
+@st.cache_data(ttl=TTL, show_spinner="Forecasting household demand…")
+def forecast_demand(n_slots: int, start_iso: str) -> list[LoadForecastSlot]:
+    return demand_forecast_slots(n_slots, datetime.fromisoformat(start_iso))
+
+
+def _build_ev(ev_key: EvKey, n: int) -> EVConstraints | None:
+    if ev_key is None:
+        return None
+    plug_from, plug_to, departure_index, dep_soc_pct = ev_key
+    availability = [plug_from <= i * 0.5 < plug_to for i in range(n)]
+    return EVConstraints(
+        availability=availability,
+        departure_index=min(departure_index, n),
+        departure_soc_frac=dep_soc_pct / 100.0,
+    )
+
+
+@st.cache_data(ttl=TTL, show_spinner="Optimising the battery schedule…")
+def run_single(
+    region: str,
+    hours: int,
+    start_iso: str,
+    capacity: float,
+    power: float,
+    carbon_weight: float,
+    degradation: float,
+    ev_key: EvKey,
+) -> OptimisationResult:
+    prices, carbon = load_market(region, hours, start_iso)
+    load = [s.load_kwh for s in forecast_demand(len(prices), start_iso)]
+    battery = BatterySpec(capacity_kwh=capacity, max_charge_kw=power, max_discharge_kw=power)
+    return optimise_schedule(
+        prices,
+        carbon,
+        battery,
+        load_kwh=load,
+        carbon_weight_gbp_per_kg=carbon_weight,
+        degradation_gbp_per_kwh=degradation,
+        ev=_build_ev(ev_key, len(prices)),
+    )
+
+
+@st.cache_data(ttl=TTL, show_spinner="Co-optimising the virtual power plant…")
+def run_vpp(
+    region: str,
+    hours: int,
+    start_iso: str,
+    capacity: float,
+    power: float,
+    carbon_weight: float,
+    fleet_size: int,
+    headroom: float,
+) -> PortfolioResult:
+    prices, carbon = load_market(region, hours, start_iso)
+    load = [s.load_kwh for s in forecast_demand(len(prices), start_iso)]
+    battery = BatterySpec(capacity_kwh=capacity, max_charge_kw=power, max_discharge_kw=power)
+    return optimise_portfolio(
+        prices,
+        carbon,
+        [battery] * fleet_size,
+        load_kwh=load,
+        carbon_weight_gbp_per_kg=carbon_weight,
+        network_headroom_kw=headroom or None,
+        peak_bid_gbp_per_kw=5.0,
+    )
+
+
+@st.cache_data(ttl=TTL, show_spinner="Sweeping battery sizes…")
+def run_sweep(
+    region: str, hours: int, start_iso: str, power: float, carbon_weight: float
+) -> pd.DataFrame:
+    prices, carbon = load_market(region, hours, start_iso)
+    load = [s.load_kwh for s in forecast_demand(len(prices), start_iso)]
+    return sweep_savings(
+        prices,
+        carbon,
+        capacities_kwh=[2, 4, 6, 8, 10, 14, 20],
+        powers_kw=[power],
+        load_kwh=load,
+        carbon_weight_gbp_per_kg=carbon_weight,
+    )
+
+
+# --- page ------------------------------------------------------------------------------
 st.set_page_config(page_title="Zephyrus", layout="wide")
 st.title("⚡ Zephyrus — flexibility optimiser")
 st.caption("Live Octopus Agile prices + National Grid carbon intensity -> optimal battery plan")
 
 with st.sidebar:
     st.header("Asset & region")
-    region = st.selectbox("GSP region", list("ABCDEFGHJKLMNP"), index=2)
+    region = str(st.selectbox("GSP region", list("ABCDEFGHJKLMNP"), index=2))
     capacity = st.slider("Battery capacity (kWh)", 2.0, 20.0, 5.0, 0.5)
     power = st.slider("Max charge / discharge (kW)", 1.0, 7.0, 3.0, 0.5)
     hours = st.slider("Horizon (hours)", 12, 48, 24, 6)
@@ -39,6 +153,8 @@ with st.sidebar:
     st.header("Battery wear & EV mode")
     degradation = st.slider("Degradation cost (£/kWh throughput)", 0.0, 0.20, 0.0, 0.01)
     ev_mode = st.checkbox("EV smart-charging (plug-in window + departure target)")
+    departure_hour = hours
+    departure_soc = 80
     if ev_mode:
         plug_from, plug_to = st.slider(
             "Plugged-in window (hours from now)", 0, hours, (0, hours), 1
@@ -51,37 +167,21 @@ with st.sidebar:
     headroom = st.slider("Network headroom (kW, 0 = none)", 0.0, 200.0, 0.0, 5.0)
 
 start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-prices = OctopusClient().get_agile_prices(start, start + timedelta(hours=hours), gsp_group=region)
-carbon = CarbonIntensityClient().get_forecast_48h(start)
-prices, carbon = align_price_carbon(prices, carbon)
+start_iso = start.isoformat()
+prices, carbon = load_market(region, hours, start_iso)
 
 if not prices:
     st.warning("No overlapping price/carbon data right now — try again shortly.")
     st.stop()
 
-battery = BatterySpec(capacity_kwh=capacity, max_charge_kw=power, max_discharge_kw=power)
-forecast_slots = demand_forecast_slots(len(prices), start)
-load = [slot.load_kwh for slot in forecast_slots]
-
-ev = None
+forecast_slots = forecast_demand(len(prices), start_iso)
+ev_key: EvKey = None
 if ev_mode:
-    n = len(prices)
-    availability = [plug_from <= i * 0.5 < plug_to for i in range(n)]
-    ev = EVConstraints(
-        availability=availability,
-        departure_index=min(int(departure_hour * 2), n),
-        departure_soc_frac=departure_soc / 100.0,
-    )
+    ev_key = (int(plug_from), int(plug_to), int(departure_hour * 2), float(departure_soc))
 
 try:
-    result = optimise_schedule(
-        prices,
-        carbon,
-        battery,
-        load_kwh=load,
-        carbon_weight_gbp_per_kg=carbon_weight,
-        degradation_gbp_per_kwh=degradation,
-        ev=ev,
+    result = run_single(
+        region, hours, start_iso, capacity, power, carbon_weight, degradation, ev_key
     )
 except ValueError as exc:
     st.error(f"Infeasible EV plan — relax the plug-in window or departure target.\n\n{exc}")
@@ -110,15 +210,7 @@ st.bar_chart(frame[["charge_kw", "discharge_kw"]])
 st.area_chart(frame[["soc_kwh"]])
 
 st.header("🔌 Virtual power plant")
-portfolio = optimise_portfolio(
-    prices,
-    carbon,
-    [BatterySpec(capacity_kwh=capacity, max_charge_kw=power, max_discharge_kw=power)] * fleet_size,
-    load_kwh=load,
-    carbon_weight_gbp_per_kg=carbon_weight,
-    network_headroom_kw=headroom or None,
-    peak_bid_gbp_per_kw=5.0,
-)
+portfolio = run_vpp(region, hours, start_iso, capacity, power, carbon_weight, fleet_size, headroom)
 p1, p2, p3, p4 = st.columns(4)
 p1.metric("Fleet cost saving", f"£{portfolio.cost_saving_gbp:.2f}")
 p2.metric("Coincident peak", f"{portfolio.peak_import_kw:.1f} kW")
@@ -126,9 +218,7 @@ p3.metric("Peak shaved vs naive", f"{portfolio.peak_reduction_kw:.1f} kW")
 p4.metric("Balancing bid value", f"£{portfolio.bid_revenue_gbp:.2f}")
 
 st.header("📈 Scenario compare — savings vs battery size")
-sweep = sweep_savings(
-    prices, carbon, capacities_kwh=[2, 4, 6, 8, 10, 14, 20], powers_kw=[power], load_kwh=load
-)
+sweep = run_sweep(region, hours, start_iso, power, carbon_weight)
 fig = px.line(
     sweep,
     x="capacity_kwh",
